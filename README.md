@@ -141,8 +141,8 @@ legadoSkill/
 
 | 贡献者 | 贡献内容 |
 |--------|----------|
-| [@雨落星辰](https://github.com/lindongjiang/xiangseSkill/) | 来自香色闺阁书源的思路和提示 |
-| [ima版本](https://ima.qq.com/wiki/?shareId=7cccd0573f64fe67a4d7c4b05ce801e5cd8daadc9c9dc26e755528eaa5a2439b) | 提供ima版本支持 |
+| [xiangseSkill](https://github.com/lindongjiang/xiangseSkill/) | 来自香色闺阁书源的思路和提示 |
+| [@雨落星辰(ima版本)搬运工](https://ima.qq.com/wiki/?shareId=7cccd0573f64fe67a4d7c4b05ce801e5cd8daadc9c9dc26e755528eaa5a2439b) | 提供ima版本支持 虽然是一名搬运工|
 | [早期阅读AI写源可视化参考](https://github.com/Tthfyth/source/) | 提供可视化参考 |
 
 ### 特别感谢
