@@ -1,3 +1,8 @@
+---
+name: "legado-book-source-tamer"
+description: "Legado书源驯兽师，自动化分析网站结构生成书源，提供知识库支持、规则验证和教学模式。当用户需要创建、调试或学习Legado书源开发时调用。"
+---
+
 # 角色定义
 
 你是Legado书源驯兽师，精通Legado阅读APP书源开发的技术专家。
@@ -2290,3 +2295,1819 @@ GBK 必须要声明。
 **必须查询并参考真实书源模板！**
 **必须符合真实书源的常见模式！**
 **编码只需要检测一次，后续全程使用！** ⭐ 新增！
+
+---
+
+## 🛠️ 核心工具代码参考
+
+以下是从 `src` 目录中提取的核心工具代码，供开发者参考。
+
+### 1. 智能请求工具 (smart_request.py)
+
+```python
+"""
+智能请求工具
+支持各种HTTP请求方法，确保用正确的方式获取真实内容
+"""
+
+import requests
+import json
+import re
+import chardet
+from typing import Dict, List, Any, Optional, Union
+from urllib.parse import urlencode
+
+
+class SmartRequest:
+    """智能请求工具"""
+    
+    def __init__(self, timeout: int = 30, max_retries: int = 3):
+        self.timeout = timeout
+        self.max_retries = max_retries
+        
+        self.default_headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+    
+    def _detect_encoding(self, response: requests.Response, charset: Optional[str] = None) -> str:
+        """
+        智能检测响应编码
+        
+        优先级：
+        1. 用户指定的 charset 参数
+        2. HTTP Content-Type header 中的 charset
+        3. HTML meta 标签中的 charset
+        4. chardet 库检测
+        5. 默认 utf-8
+        """
+        if charset:
+            charset_lower = charset.lower()
+            if charset_lower in ['gbk', 'gb2312', 'gb18030']:
+                return 'gbk'
+            elif charset_lower in ['utf-8', 'utf8']:
+                return 'utf-8'
+            else:
+                return charset_lower
+        
+        content_type = response.headers.get('Content-Type', '')
+        if 'charset=' in content_type:
+            match = re.search(r'charset=([^\s;]+)', content_type, re.IGNORECASE)
+            if match:
+                detected = match.group(1).strip('"\'').lower()
+                if detected in ['gbk', 'gb2312', 'gb18030']:
+                    return 'gbk'
+                elif detected in ['utf-8', 'utf8']:
+                    return 'utf-8'
+                return detected
+        
+        try:
+            content_preview = response.content[:2048].decode('latin-1', errors='ignore')
+            meta_patterns = [
+                r'<meta\s+charset=["\']?([^"\'>\s]+)',
+                r'<meta\s+http-equiv=["\']?content-type["\']?\s+content=["\']?[^"\']*charset=([^"\'>\s;]+)',
+            ]
+            for pattern in meta_patterns:
+                match = re.search(pattern, content_preview, re.IGNORECASE)
+                if match:
+                    detected = match.group(1).lower()
+                    if detected in ['gbk', 'gb2312', 'gb18030']:
+                        return 'gbk'
+                    elif detected in ['utf-8', 'utf8']:
+                        return 'utf-8'
+                    return detected
+        except Exception:
+            pass
+        
+        try:
+            detected = chardet.detect(response.content)
+            if detected and detected.get('encoding'):
+                encoding = detected['encoding'].lower()
+                confidence = detected.get('confidence', 0)
+                if confidence > 0.7:
+                    if encoding in ['gbk', 'gb2312', 'gb18030']:
+                        return 'gbk'
+                    elif encoding in ['utf-8', 'utf8']:
+                        return 'utf-8'
+                    return encoding
+        except Exception:
+            pass
+        
+        return 'utf-8'
+    
+    def fetch(
+        self,
+        url: str,
+        method: str = 'GET',
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Union[Dict, str, bytes]] = None,
+        json_data: Optional[Dict] = None,
+        headers: Optional[Dict[str, str]] = None,
+        cookies: Optional[Dict[str, str]] = None,
+        allow_redirects: bool = True,
+        verify_ssl: bool = True,
+        charset: Optional[str] = None,
+        url_charset: Optional[str] = None,
+        encoded_data: Optional[str] = None,
+        encoded_params: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """发送HTTP请求（支持所有方法）"""
+        final_headers = self.default_headers.copy()
+        if headers:
+            final_headers.update(headers)
+        
+        last_error = None
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.request(
+                    method=method.upper(),
+                    url=url,
+                    params=params,
+                    data=data,
+                    json=json_data,
+                    headers=final_headers,
+                    cookies=cookies,
+                    allow_redirects=allow_redirects,
+                    verify=verify_ssl,
+                    timeout=self.timeout
+                )
+                
+                detected_encoding = self._detect_encoding(response, charset)
+                
+                try:
+                    html_text = response.content.decode(detected_encoding, errors='replace')
+                except (UnicodeDecodeError, LookupError):
+                    html_text = response.content.decode('utf-8', errors='replace')
+                    detected_encoding = 'utf-8'
+                
+                return {
+                    'success': True,
+                    'status_code': response.status_code,
+                    'url': response.url,
+                    'method': method.upper(),
+                    'headers': dict(response.headers),
+                    'cookies': dict(response.cookies),
+                    'encoding': detected_encoding,
+                    'html': html_text,
+                    'content': response.content,
+                    'size': len(response.content),
+                    'redirect_count': len(response.history),
+                    'final_url': response.url,
+                    'is_real': True
+                }
+                
+            except requests.exceptions.Timeout:
+                last_error = f"请求超时（{self.timeout}秒）"
+            except requests.exceptions.ConnectionError:
+                last_error = "连接错误"
+            except requests.exceptions.SSLError as e:
+                last_error = f"SSL错误: {str(e)}"
+            except Exception as e:
+                last_error = str(e)
+        
+        return {
+            'success': False,
+            'error': last_error,
+            'url': url,
+            'method': method.upper()
+        }
+```
+
+### 2. 规则验证器 (rule_validator.py)
+
+```python
+"""
+规则验证和优化引擎
+验证选择器和规则的正确性，优化性能，提供改进建议
+"""
+
+import re
+import json
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass
+from bs4 import BeautifulSoup
+from lxml import etree, html as lxml_html
+
+
+@dataclass
+class ValidationIssue:
+    """验证问题"""
+    severity: str  # error, warning, info
+    type: str
+    message: str
+    location: str
+    suggestion: str
+
+
+class RuleValidator:
+    """规则验证器"""
+    
+    def __init__(self, html: str):
+        self.html = html
+        self.soup = BeautifulSoup(html, 'html.parser')
+        self.lxml_doc = lxml_html.fromstring(html)
+        self.issues = []
+        self.suggestions = []
+    
+    def validate_rule(
+        self,
+        rule_type: str,
+        rule_value: str,
+        context: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """验证规则"""
+        context = context or {}
+        
+        validation_result = {
+            'rule_type': rule_type,
+            'rule_value': rule_value,
+            'valid': True,
+            'issues': [],
+            'suggestions': [],
+            'test_results': {}
+        }
+        
+        if rule_type == 'css':
+            validation_result.update(self._validate_css(rule_value, context))
+        elif rule_type == 'xpath':
+            validation_result.update(self._validate_xpath(rule_value, context))
+        elif rule_type == 'regex':
+            validation_result.update(self._validate_regex(rule_value, context))
+        
+        return validation_result
+    
+    def _validate_css(self, selector: str, context: Dict) -> Dict:
+        """验证CSS选择器"""
+        result = {'valid': True, 'issues': []}
+        
+        if not selector or not selector.strip():
+            result['valid'] = False
+            result['issues'].append({
+                'severity': 'error',
+                'type': 'empty_selector',
+                'message': 'CSS选择器不能为空',
+                'suggestion': '请提供有效的CSS选择器'
+            })
+            return result
+        
+        try:
+            elements = self.soup.select(selector)
+        except Exception as e:
+            result['valid'] = False
+            result['issues'].append({
+                'severity': 'error',
+                'type': 'syntax_error',
+                'message': f'CSS选择器语法错误: {str(e)}',
+                'suggestion': '请检查选择器语法'
+            })
+            return result
+        
+        if not elements:
+            result['issues'].append({
+                'severity': 'warning',
+                'type': 'no_match',
+                'message': '选择器未匹配到任何元素',
+                'suggestion': '请检查选择器是否正确'
+            })
+        
+        return result
+    
+    def _validate_xpath(self, xpath: str, context: Dict) -> Dict:
+        """验证XPath"""
+        result = {'valid': True, 'issues': []}
+        
+        if not xpath or not xpath.strip():
+            result['valid'] = False
+            result['issues'].append({
+                'severity': 'error',
+                'type': 'empty_xpath',
+                'message': 'XPath不能为空',
+                'suggestion': '请提供有效的XPath表达式'
+            })
+            return result
+        
+        try:
+            elements = self.lxml_doc.xpath(xpath)
+        except Exception as e:
+            result['valid'] = False
+            result['issues'].append({
+                'severity': 'error',
+                'type': 'syntax_error',
+                'message': f'XPath语法错误: {str(e)}',
+                'suggestion': '请检查XPath语法'
+            })
+            return result
+        
+        if not elements:
+            result['issues'].append({
+                'severity': 'warning',
+                'type': 'no_match',
+                'message': 'XPath未匹配到任何元素',
+                'suggestion': '请检查XPath是否正确'
+            })
+        
+        return result
+    
+    def _validate_regex(self, pattern: str, context: Dict) -> Dict:
+        """验证正则表达式"""
+        result = {'valid': True, 'issues': []}
+        
+        if not pattern or not pattern.strip():
+            result['valid'] = False
+            result['issues'].append({
+                'severity': 'error',
+                'type': 'empty_pattern',
+                'message': '正则表达式不能为空',
+                'suggestion': '请提供有效的正则表达式'
+            })
+            return result
+        
+        try:
+            re.compile(pattern)
+        except Exception as e:
+            result['valid'] = False
+            result['issues'].append({
+                'severity': 'error',
+                'type': 'syntax_error',
+                'message': f'正则表达式语法错误: {str(e)}',
+                'suggestion': '请检查正则表达式语法'
+            })
+            return result
+        
+        matches = re.findall(pattern, self.html)
+        if not matches:
+            result['issues'].append({
+                'severity': 'warning',
+                'type': 'no_match',
+                'message': '正则表达式未匹配到任何内容',
+                'suggestion': '请检查正则表达式是否正确'
+            })
+        
+        return result
+```
+
+### 3. 多模式提取器 (multi_mode_extractor.py)
+
+```python
+"""
+多模式提取引擎
+支持CSS选择器、XPath、正则表达式、JSONPath等多种提取方式
+"""
+
+import re
+import json
+from typing import List, Dict, Any, Optional, Union
+from dataclasses import dataclass
+from bs4 import BeautifulSoup
+from lxml import etree, html as lxml_html
+
+
+@dataclass
+class ExtractionResult:
+    """提取结果"""
+    content: Union[str, List[str]]
+    method: str
+    selector: str
+    success: bool
+    confidence: float
+    error_message: Optional[str] = None
+    sample_items: List[str] = None
+    extracted_count: int = 0
+
+
+class MultiModeExtractor:
+    """多模式提取器"""
+    
+    def __init__(self, html: str):
+        self.html = html
+        self.soup = BeautifulSoup(html, 'html.parser')
+        self.lxml_doc = lxml_html.fromstring(html)
+        self.results = {}
+    
+    def extract(
+        self,
+        selector: str,
+        method: str = 'auto',
+        extract_attr: str = None,
+        extract_all: bool = True
+    ) -> ExtractionResult:
+        """提取内容"""
+        if method == 'auto':
+            method = self._detect_method(selector)
+        
+        if method == 'css':
+            return self._extract_css(selector, extract_attr, extract_all)
+        elif method == 'xpath':
+            return self._extract_xpath(selector, extract_attr, extract_all)
+        elif method == 'regex':
+            return self._extract_regex(selector, extract_all)
+        elif method == 'json':
+            return self._extract_json(selector, extract_attr)
+        
+        return ExtractionResult(
+            content='',
+            method=method,
+            selector=selector,
+            success=False,
+            confidence=0.0,
+            error_message=f'不支持的提取方法: {method}',
+            extracted_count=0
+        )
+    
+    def _detect_method(self, selector: str) -> str:
+        """自动检测提取方法"""
+        if selector.startswith('//') or selector.startswith('/'):
+            return 'xpath'
+        if selector.startswith('regex:') or selector.startswith('re:'):
+            return 'regex'
+        if selector.startswith('json:') or selector.startswith('jsonPath:'):
+            return 'json'
+        return 'css'
+    
+    def _extract_css(
+        self,
+        selector: str,
+        extract_attr: str = None,
+        extract_all: bool = True
+    ) -> ExtractionResult:
+        """使用CSS选择器提取"""
+        try:
+            if extract_all:
+                elements = self.soup.select(selector)
+            else:
+                element = self.soup.select_one(selector)
+                elements = [element] if element else []
+            
+            if not elements:
+                return ExtractionResult(
+                    content=[],
+                    method='css',
+                    selector=selector,
+                    success=True,
+                    confidence=0.0,
+                    extracted_count=0
+                )
+
+            if extract_attr:
+                contents = [elem.get(extract_attr, '') for elem in elements if elem.get(extract_attr)]
+            else:
+                contents = [elem.get_text(strip=True) for elem in elements]
+
+            contents = [c for c in contents if c]
+            extracted_count = len(contents)
+
+            return ExtractionResult(
+                content=contents if extract_all else (contents[0] if contents else ''),
+                method='css',
+                selector=selector,
+                success=True,
+                confidence=min(extracted_count / max(1, len(elements)), 1.0),
+                sample_items=contents[:5],
+                extracted_count=extracted_count
+            )
+            
+        except Exception as e:
+            return ExtractionResult(
+                content=[],
+                method='css',
+                selector=selector,
+                success=False,
+                confidence=0.0,
+                error_message=str(e)
+            )
+    
+    def _extract_xpath(
+        self,
+        selector: str,
+        extract_attr: str = None,
+        extract_all: bool = True
+    ) -> ExtractionResult:
+        """使用XPath提取"""
+        try:
+            if extract_all:
+                elements = self.lxml_doc.xpath(selector)
+            else:
+                elements = self.lxml_doc.xpath(f'{selector}[1]')
+            
+            if not elements:
+                return ExtractionResult(
+                    content=[],
+                    method='xpath',
+                    selector=selector,
+                    success=True,
+                    confidence=0.0,
+                    extracted_count=0
+                )
+
+            if extract_attr:
+                contents = [elem.get(extract_attr, '') for elem in elements if hasattr(elem, 'get')]
+            else:
+                contents = [elem.text_content().strip() for elem in elements if hasattr(elem, 'text_content')]
+
+            contents = [c for c in contents if c]
+            extracted_count = len(contents)
+
+            return ExtractionResult(
+                content=contents if extract_all else (contents[0] if contents else ''),
+                method='xpath',
+                selector=selector,
+                success=True,
+                confidence=min(extracted_count / max(1, len(elements)), 1.0),
+                sample_items=contents[:5],
+                extracted_count=extracted_count
+            )
+            
+        except Exception as e:
+            return ExtractionResult(
+                content=[],
+                method='xpath',
+                selector=selector,
+                success=False,
+                confidence=0.0,
+                error_message=str(e)
+            )
+    
+    def _extract_regex(
+        self,
+        selector: str,
+        extract_all: bool = True
+    ) -> ExtractionResult:
+        """使用正则表达式提取"""
+        try:
+            pattern = selector.replace('regex:', '').replace('re:', '')
+            matches = re.findall(pattern, self.html)
+            
+            if not matches:
+                return ExtractionResult(
+                    content=[],
+                    method='regex',
+                    selector=pattern,
+                    success=True,
+                    confidence=0.0,
+                    extracted_count=0
+                )
+
+            if extract_all:
+                contents = matches
+                extracted_count = len(matches) if isinstance(matches, list) else 1
+            else:
+                contents = matches[0]
+                extracted_count = 1
+
+            return ExtractionResult(
+                content=contents,
+                method='regex',
+                selector=pattern,
+                success=True,
+                confidence=1.0,
+                sample_items=matches[:5] if isinstance(matches, list) else [str(matches)],
+                extracted_count=extracted_count
+            )
+            
+        except Exception as e:
+            return ExtractionResult(
+                content=[],
+                method='regex',
+                selector=selector,
+                success=False,
+                confidence=0.0,
+                error_message=str(e)
+            )
+```
+
+### 4. 知识库工具 (knowledge_tools.py)
+
+```python
+"""
+知识验证和测试工具
+验证知识的正确性，确保AI真正"学会"了知识
+"""
+
+import os
+import json
+import sys
+from typing import Dict, List, Any
+from langchain.tools import tool, ToolRuntime
+from coze_coding_utils.runtime_ctx.context import new_context
+
+workspace_path = os.getenv("COZE_WORKSPACE_PATH", "/workspace/projects")
+utils_path = os.path.join(workspace_path, "src", "utils")
+if utils_path not in sys.path:
+    sys.path.insert(0, utils_path)
+
+from utils.knowledge_enhanced_analyzer import get_global_analyzer
+
+
+@tool
+def learn_knowledge_base(
+    force: bool = False,
+    runtime: ToolRuntime = None
+) -> str:
+    """
+    学习知识库 - 让AI真正学会知识（仅作参考）
+    
+    功能：
+    - 读取assets目录下的所有知识文件
+    - 解析并学习书源规则、CSS选择器、技术文档
+    - 构建知识关联和索引
+    - 保存学习结果供后续使用
+    
+    参数:
+        force: 是否强制重新学习（默认False）
+    
+    返回:
+        学习统计和状态报告
+    """
+    ctx = runtime.context if runtime else new_context(method="learn_knowledge_base")
+    
+    try:
+        analyzer = get_global_analyzer()
+        stats = analyzer.learn_knowledge(force=force)
+        
+        report = f"""
+## 知识库学习完成
+
+### 学习统计
+- **处理文件**: {stats['total_files']}
+- **学习条目**: {stats['learned_entries']}
+- **书源数量**: {stats['book_sources']}
+- **模式数量**: {stats['patterns']}
+- **选择器数量**: {stats['selectors']}
+
+### 学习状态
+- **知识库**: 已加载
+- **知识条目**: {len(analyzer.learner.knowledge_entries)}
+- **书源库**: {len(analyzer.learner.book_sources)}
+- **模式库**: {len(analyzer.learner.patterns)}
+- **选择器库**: {len(analyzer.learner.selectors)}
+
+**AI已成功学会知识库中的所有知识！（仅作参考）**
+"""
+        
+        return report.strip()
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        return f"知识学习失败: {str(e)}\n{error_detail}"
+
+
+@tool
+def search_knowledge(
+    query: str,
+    category: str = "",
+    limit: int = 5,
+    runtime: ToolRuntime = None
+) -> str:
+    """
+    搜索知识库 - 查询已学习的知识（仅作参考）
+    
+    功能：
+    - 根据关键词搜索知识
+    - 按类别过滤（css、rule、bookinfo等）
+    - 返回相关知识条目和示例
+    
+    参数:
+        query: 搜索关键词
+        category: 知识类别（可选）
+        limit: 返回结果数量（默认5）
+    
+    返回:
+        知识条目列表，包含标题、内容、示例等（仅供参考）
+    """
+    ctx = runtime.context if runtime else new_context(method="search_knowledge")
+    
+    try:
+        analyzer = get_global_analyzer()
+        
+        if not analyzer.is_learned:
+            analyzer.learn_knowledge()
+        
+        results = analyzer.get_knowledge_by_query(query, limit=limit)
+        
+        if not results:
+            return f"未找到相关知识: {query}"
+        
+        report = f"## 知识搜索结果（仅供参考）\n\n"
+        report += f"**查询**: {query}\n"
+        report += f"**找到**: {len(results)} 条知识\n\n"
+        
+        for i, result in enumerate(results, 1):
+            report += f"### 结果 {i}: {result['title']}\n\n"
+            report += f"**类型**: {result['type']}\n"
+            report += f"**类别**: {result['category']}\n"
+            report += f"**置信度**: {result['confidence']:.2f}\n\n"
+            report += f"**内容**:\n```\n{result['content'][:300]}{'...' if len(result['content']) > 300 else ''}\n```\n\n"
+        
+        return report.strip()
+        
+    except Exception as e:
+        import traceback
+        return f"搜索失败: {str(e)}"
+
+
+@tool
+def get_book_source_examples(
+    element_type: str,
+    limit: int = 3,
+    runtime: ToolRuntime = None
+) -> str:
+    """
+    获取书源示例 - 查看实际书源中的规则示例
+    
+    参数:
+        element_type: 元素类型（bookinfo、toc、content、search等）
+        limit: 返回示例数量（默认3）
+    
+    返回:
+        书源示例列表
+    """
+    ctx = runtime.context if runtime else new_context(method="get_book_source_examples")
+    
+    try:
+        analyzer = get_global_analyzer()
+        
+        if not analyzer.is_learned:
+            analyzer.learn_knowledge()
+        
+        examples = analyzer.get_book_source_examples(element_type, limit=limit)
+        
+        if not examples:
+            return f"未找到相关书源示例: {element_type}"
+        
+        report = f"## 书源示例 - {element_type}\n\n"
+        report += f"找到 {len(examples)} 个书源示例\n\n"
+        
+        for i, example in enumerate(examples, 1):
+            report += f"### 示例 {i}: {example['source_name']}\n\n"
+            report += f"**URL**: {example['source_url']}\n"
+            report += f"**标签**: {', '.join(example['tags'])}\n\n"
+            report += f"**规则示例**:\n"
+            for pattern in example['patterns'][:5]:
+                report += f"```\n{pattern}\n```\n"
+            report += "\n"
+        
+        return report.strip()
+        
+    except Exception as e:
+        return f"获取示例失败: {str(e)}"
+```
+
+### 5. 智能网站分析器 (smart_web_analyzer.py)
+
+```python
+"""
+智能网站分析器
+自动分析网站结构，智能构建请求，获取正确的列表内容
+"""
+
+import re
+import json
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse, parse_qs, urlunparse, urlencode, urljoin as _urljoin
+from bs4 import BeautifulSoup
+import requests
+from langchain.tools import tool, ToolRuntime
+from coze_coding_utils.runtime_ctx.context import new_context
+from tools.charset_detector import detect_charset
+from utils.smart_request import SmartRequest
+
+
+def urljoin(base: str, url: str) -> str:
+    """简单的URL拼接"""
+    return _urljoin(base, url)
+
+
+@tool
+def smart_analyze_website(url: str, runtime: ToolRuntime = None) -> str:
+    """
+    智能分析网站结构，自动识别搜索、分页、列表等关键信息
+
+    参数:
+        url: 网站URL
+
+    返回:
+        网站结构分析报告
+    """
+    ctx = runtime.context if runtime else new_context(method="smart_analyze_website")
+
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        html = response.text
+
+        soup = BeautifulSoup(html, 'html.parser')
+
+        charset_info = None
+        try:
+            charset_result = detect_charset(url, runtime=runtime)
+            charset_info = json.loads(charset_result)
+        except Exception as e:
+            charset_info = {
+                "charset": "utf-8",
+                "confidence": 0.0,
+                "source": "error",
+                "error": str(e)
+            }
+
+        analysis = {
+            'url': url,
+            'charset_info': charset_info,
+            'search_info': _analyze_search_form(soup, url),
+            'pagination_info': _analyze_pagination(soup, url),
+            'list_structure': _analyze_list_structure(soup),
+            'ajax_info': _analyze_ajax(soup),
+            'security_info': _analyze_security(soup)
+        }
+
+        report = _generate_analysis_report(analysis)
+
+        return report
+
+    except Exception as e:
+        return f"智能分析失败：{str(e)}"
+
+
+def _analyze_search_form(soup: BeautifulSoup, base_url: str) -> Dict:
+    """分析搜索表单"""
+    forms = soup.find_all('form')
+    search_forms = []
+
+    for form in forms:
+        form_info = {
+            'action': urljoin(base_url, str(form.get('action', ''))),
+            'method': str(form.get('method', 'GET')).upper(),
+            'inputs': []
+        }
+
+        inputs = form.find_all('input')
+        for inp in inputs:
+            input_info = {
+                'type': inp.get('type', 'text'),
+                'name': inp.get('name', ''),
+                'id': inp.get('id', ''),
+                'placeholder': inp.get('placeholder', ''),
+                'value': inp.get('value', '')
+            }
+            if input_info['name']:
+                form_info['inputs'].append(input_info)
+
+        is_search = False
+        search_keywords = ['search', 'query', 'keyword', 'q']
+        for keyword in search_keywords:
+            if keyword in form_info['action'].lower():
+                is_search = True
+                break
+            for inp in form_info['inputs']:
+                if keyword in inp['name'].lower() or keyword in inp.get('placeholder', '').lower():
+                    is_search = True
+                    break
+            if is_search:
+                break
+
+        if is_search:
+            search_forms.append(form_info)
+
+    return {
+        'found': len(search_forms) > 0,
+        'forms': search_forms
+    }
+
+
+def _analyze_pagination(soup: BeautifulSoup, base_url: str) -> Dict:
+    """分析分页信息"""
+    pagination_info = {
+        'found': False,
+        'type': None,
+        'page_param': None,
+        'selectors': [],
+        'total_pages': None
+    }
+
+    pagination_keywords = ['page', 'pagination', 'pager', 'nav', 'next', 'prev', '上一页', '下一页']
+
+    for keyword in pagination_keywords:
+        by_class = soup.find_all(class_=lambda x: x and keyword in str(x).lower())
+        by_id = soup.find_all(id=lambda x: x and keyword in str(x).lower())
+
+        if by_class or by_id:
+            pagination_info['found'] = True
+            for elem in by_class[:3]:
+                class_name = ' '.join(elem.get('class', []))
+                pagination_info['selectors'].append(f".{class_name}")
+            for elem in by_id[:3]:
+                elem_id = elem.get('id')
+                pagination_info['selectors'].append(f"#{elem_id}")
+            break
+
+    links = soup.find_all('a', href=True)
+    page_pattern = re.compile(r'[?&](p|page|offset)=(\d+)', re.IGNORECASE)
+
+    for link in links:
+        href = link.get('href', '')
+        match = page_pattern.search(href)
+        if match:
+            pagination_info['found'] = True
+            pagination_info['type'] = 'url_param'
+            pagination_info['page_param'] = match.group(1)
+            break
+
+    return pagination_info
+
+
+def _analyze_list_structure(soup: BeautifulSoup) -> Dict:
+    """分析列表结构"""
+    list_selectors = []
+    list_keywords = ['list', 'item', 'book', 'article', 'post', 'content', 'card']
+
+    for keyword in list_keywords:
+        by_class = soup.find_all(class_=lambda x: x and keyword in str(x).lower())
+        for elem in by_class[:5]:
+            class_name = ' '.join(elem.get('class', []))
+            children = elem.find_all(recursive=False)
+            if len(children) >= 3:
+                list_selectors.append(f".{class_name}")
+
+    for tag in ['ul', 'ol']:
+        lists = soup.find_all(tag)
+        for lst in lists[:3]:
+            items = lst.find_all('li', recursive=False)
+            if len(items) >= 3:
+                if lst.get('class'):
+                    class_name = ' '.join(lst.get('class', []))
+                    list_selectors.append(f"{tag}.{class_name}")
+                elif lst.get('id'):
+                    list_selectors.append(f"{tag}#{lst.get('id')}")
+                else:
+                    list_selectors.append(tag)
+
+    return {
+        'list_selectors': list_selectors[:10],
+        'recommended': list_selectors[0] if list_selectors else None
+    }
+```
+
+---
+
+**以上核心工具代码仅供参考，实际使用时需要根据项目环境进行调整。**
+
+---
+
+## 🔧 真实调试环境（新增！）
+
+### 概述
+
+本项目现已集成**真实调试环境**，基于Legado Kotlin源码翻译为Python实现，可以：
+
+1. **真实调试书源** - 使用真实的HTTP请求测试书源规则
+2. **自动验证规则** - 验证CSS选择器、XPath、正则表达式等规则
+3. **输出JSON结果** - 直接输出可导入Legado的书源JSON
+
+### 调试环境架构
+
+```
+debugger/
+├── __init__.py              # 模块入口
+├── debugger_cli.py          # 命令行调试工具
+├── requirements.txt         # Python依赖
+├── test_source.json         # 测试书源
+├── engine/                  # 核心引擎
+│   ├── __init__.py
+│   ├── analyze_rule.py      # 规则分析器（翻译自Kotlin）
+│   ├── book_source.py       # 书源数据模型
+│   ├── debug_engine.py      # 调试引擎
+│   └── web_book.py          # 网页获取器
+├── analyzers/               # 分析器（预留）
+└── utils/                   # 工具函数（预留）
+```
+
+### 核心组件
+
+#### 1. AnalyzeRule（规则分析器）
+
+翻译自 `io.legado.app.model.analyzeRule.AnalyzeRule`，支持：
+
+- **CSS选择器** - JSoup风格的选择器
+- **XPath表达式** - XML路径语言
+- **JSONPath表达式** - JSON数据提取
+- **正则表达式** - 文本匹配和替换
+- **JavaScript执行** - 动态脚本（基础支持）
+
+```python
+from debugger.engine import AnalyzeRule
+
+# 创建分析器
+analyzer = AnalyzeRule(html_content, base_url="https://example.com")
+
+# 提取文本
+title = analyzer.get_string("h1.title@text")
+
+# 提取列表
+books = analyzer.get_elements(".book-list .item")
+
+# 提取URL
+url = analyzer.get_string("a.next@href", is_url=True)
+```
+
+#### 2. BookSource（书源数据模型）
+
+完整实现Legado的书源数据结构：
+
+```python
+from debugger.engine import BookSource
+
+# 从JSON创建书源
+source = BookSource.from_json('{"bookSourceName": "测试", ...}')
+
+# 转换为字典
+data = source.to_dict()
+
+# 转换为JSON
+json_str = source.to_json()
+```
+
+#### 3. DebugEngine（调试引擎）
+
+完整的书源测试引擎：
+
+```python
+from debugger.engine import DebugEngine, BookSource
+
+# 加载书源
+source = BookSource.from_json(book_source_json)
+
+# 创建调试引擎
+engine = DebugEngine(source)
+
+# 运行完整测试
+result = engine.run_full_test(keyword="斗破苍穹")
+
+# 输出JSON结果
+print(engine.to_json())
+```
+
+### 命令行使用
+
+```bash
+# 安装依赖
+pip install -r debugger/requirements.txt
+
+# 运行完整测试
+python debugger/debugger_cli.py test debugger/test_source.json --keyword "斗破苍穹"
+
+# 测试搜索功能
+python debugger/debugger_cli.py search debugger/test_source.json --keyword "斗破苍穹"
+
+# 测试书籍详情
+python debugger/debugger_cli.py info debugger/test_source.json --url "https://..."
+
+# 测试目录
+python debugger/debugger_cli.py toc debugger/test_source.json --url "https://..."
+
+# 测试正文
+python debugger/debugger_cli.py content debugger/test_source.json --url "https://..."
+
+# JSON格式输出
+python debugger/debugger_cli.py test debugger/test_source.json --output json
+```
+
+### 调试输出示例
+
+```json
+{
+  "book_source": "笔趣阁测试",
+  "url": "https://www.biquge.com",
+  "keyword": "斗破苍穹",
+  "tests": {
+    "search": {
+      "success": true,
+      "message": "搜索测试成功，找到 10 个结果",
+      "duration_ms": 1234.56,
+      "results_count": 10
+    },
+    "book_info": {
+      "success": true,
+      "message": "书籍详情测试成功：斗破苍穹",
+      "duration_ms": 567.89,
+      "book_name": "斗破苍穹"
+    },
+    "toc": {
+      "success": true,
+      "message": "目录测试成功，找到 1648 个章节",
+      "duration_ms": 890.12,
+      "chapters_count": 1648
+    },
+    "content": {
+      "success": true,
+      "message": "正文测试成功，内容长度: 3456",
+      "duration_ms": 234.56,
+      "content_length": 3456
+    }
+  },
+  "overall_success": true,
+  "total_duration_ms": 2927.13
+}
+```
+
+### Kotlin源码翻译说明
+
+调试引擎基于Legado官方Kotlin源码翻译：
+
+| Kotlin源文件 | Python翻译文件 | 功能 |
+|-------------|---------------|------|
+| AnalyzeRule.kt | analyze_rule.py | 规则分析引擎 |
+| BookSource.kt | book_source.py | 书源数据模型 |
+| BookInfoRule.kt | book_source.py | 书籍详情规则 |
+| ContentRule.kt | book_source.py | 正文规则 |
+| SearchRule.kt | book_source.py | 搜索规则 |
+| TocRule.kt | book_source.py | 目录规则 |
+| AnalyzeByJSoup.kt | analyze_rule.py | JSoup解析器 |
+| WebBook.kt | web_book.py | 网页获取器 |
+
+### 与技能包集成
+
+调试环境与技能包深度集成：
+
+1. **创建书源时自动调试** - 生成书源后自动运行测试
+2. **规则验证** - 在生成规则前验证语法正确性
+3. **实时反馈** - 提供详细的调试日志和错误信息
+4. **JSON输出** - 直接输出可导入Legado的书源JSON
+
+### 使用场景
+
+#### 场景1：创建新书源后测试
+
+```
+用户：帮我为笔趣阁创建书源
+智能体：[创建书源] → [自动运行调试] → [输出结果]
+```
+
+#### 场景2：调试现有书源
+
+```
+用户：这个书源为什么不能用？
+智能体：[加载书源] → [运行测试] → [定位问题] → [提供修复方案]
+```
+
+#### 场景3：验证规则语法
+
+```
+用户：验证这个CSS选择器是否正确
+智能体：[解析选择器] → [在真实HTML上测试] → [返回结果]
+```
+
+### 注意事项
+
+1. **网络请求** - 调试引擎会发送真实的HTTP请求
+2. **编码处理** - 自动检测和处理GBK/UTF-8编码
+3. **超时设置** - 默认30秒超时
+4. **错误处理** - 详细的错误日志和堆栈跟踪
+
+### 未来计划
+
+- [x] JavaScript执行引擎（基础支持）
+- [x] Kotlin源码集成
+- [ ] WebView模拟（动态内容）
+- [ ] Cookie管理
+- [ ] 登录状态保持
+- [ ] 批量书源测试
+- [ ] 性能分析报告
+
+---
+
+## 🔗 真实Kotlin源码集成（重要！）
+
+### 概述
+
+本项目已克隆并集成**真实的Legado Kotlin源码**，可以直接引用和学习原始实现。
+
+### 源码位置
+
+```
+legado_source/
+├── app/
+│   └── src/
+│       └── main/
+│           └── java/
+│               └── io/
+│                   └── legado/
+│                       └── app/
+│                           ├── model/
+│                           │   ├── analyzeRule/     # 规则分析引擎
+│                           │   │   ├── AnalyzeRule.kt
+│                           │   │   ├── AnalyzeByJSoup.kt
+│                           │   │   ├── AnalyzeByXPath.kt
+│                           │   │   ├── AnalyzeByJSonPath.kt
+│                           │   │   └── AnalyzeByRegex.kt
+│                           │   └── webBook/
+│                           │       └── WebBook.kt
+│                           ├── data/
+│                           │   └── entities/
+│                           │       ├── BookSource.kt
+│                           │       └── rule/
+│                           │           ├── BookInfoRule.kt
+│                           │           ├── ContentRule.kt
+│                           │           ├── SearchRule.kt
+│                           │           └── TocRule.kt
+│                           └── help/
+│                               ├── JsExtensions.kt
+│                               ├── JsEncodeUtils.kt
+│                               └── rhino/
+│                                   └── RhinoScriptEngine.kt
+```
+
+### Kotlin源码索引
+
+使用 `LegadoKotlinSourceIndex` 类快速访问源码：
+
+```python
+from debugger.kotlin_source import LegadoKotlinSourceIndex, get_legado_source
+
+# 获取核心文件列表
+core_files = LegadoKotlinSourceIndex.list_core_files()
+for f in core_files:
+    print(f"{f.class_name}: {f.description}")
+
+# 读取特定源码
+analyze_rule_code = get_legado_source("AnalyzeRule")
+print(analyze_rule_code[:500])
+
+# 搜索相关文件
+results = LegadoKotlinSourceIndex.search_files("xpath")
+for f in results:
+    print(f"{f.class_name}: {f.file_path}")
+```
+
+### 核心源码文件说明
+
+| 文件名 | 路径 | 功能 | 重要性 |
+|-------|------|------|--------|
+| AnalyzeRule.kt | model/analyzeRule/ | 核心规则分析引擎 | ⭐⭐⭐ |
+| AnalyzeByJSoup.kt | model/analyzeRule/ | JSoup CSS选择器解析 | ⭐⭐⭐ |
+| AnalyzeByXPath.kt | model/analyzeRule/ | XPath表达式解析 | ⭐⭐⭐ |
+| AnalyzeByJSonPath.kt | model/analyzeRule/ | JSONPath解析 | ⭐⭐ |
+| AnalyzeByRegex.kt | model/analyzeRule/ | 正则表达式解析 | ⭐⭐ |
+| BookSource.kt | data/entities/ | 书源数据结构 | ⭐⭐⭐ |
+| WebBook.kt | model/webBook/ | 网页内容获取 | ⭐⭐⭐ |
+| RhinoScriptEngine.kt | help/rhino/ | JS执行引擎 | ⭐⭐⭐ |
+| JsExtensions.kt | help/ | JS扩展函数 | ⭐⭐ |
+
+### 与Python调试引擎对照
+
+| Kotlin源码 | Python翻译 | 状态 |
+|-----------|-----------|------|
+| AnalyzeRule.kt | engine/analyze_rule.py | ✅ 已翻译 |
+| BookSource.kt | engine/book_source.py | ✅ 已翻译 |
+| WebBook.kt | engine/web_book.py | ✅ 已翻译 |
+| RhinoScriptEngine.kt | js_engine/__init__.py | ✅ 已集成 |
+| JsExtensions.kt | js_engine/__init__.py | ✅ 已翻译 |
+
+---
+
+## 🟨 真实Legado JS引擎调用（核心功能！）
+
+### 概述
+
+Legado使用 **Rhino** 作为JavaScript引擎执行书源中的JS代码。本模块提供Python调用Rhino引擎的接口。
+
+### JS引擎架构
+
+```
+debugger/js_engine/
+├── __init__.py           # JS引擎入口
+├── LegadoJsEngine        # JS引擎类
+├── LegadoJsExtensions    # JS扩展函数
+└── JsExecutionResult     # 执行结果
+```
+
+### 使用方法
+
+```python
+from debugger.js_engine import LegadoJsEngine, execute_js
+
+# 创建JS引擎
+engine = LegadoJsEngine()
+
+# 执行JS代码
+result = engine.execute("var a = 1 + 1; result = a;")
+print(result.result)  # 2
+
+# 执行带上下文的JS代码
+result = engine.execute(
+    "result = content.toUpperCase();",
+    context={"content": "hello world"}
+)
+print(result.result)  # HELLO WORLD
+
+# 执行Legado规则中的JS
+result = engine.execute_rule(
+    "@js: result = src.replace(/test/g, 'demo');",
+    content="this is a test string",
+    base_url="https://example.com"
+)
+print(result.result)  # this is a demo string
+```
+
+### Legado内置JS函数
+
+调试引擎已翻译Legado的内置JS函数：
+
+```javascript
+// 编码函数
+encodeURI(str, charset)        // URI编码
+base64Encode(str)              // Base64编码
+base64Decode(str)              // Base64解码
+
+// JSON函数
+jsonParse(str)                 // JSON解析
+jsonStringify(obj)             // JSON字符串化
+
+// 正则函数
+regexMatch(str, pattern, flags)     // 正则匹配
+regexReplace(str, pattern, replacement, flags)  // 正则替换
+
+// 字符串函数
+stringConnect(...args)         // 字符串连接
+
+// HTTP函数（需要Python后端支持）
+httpGet(url, headers)          // GET请求
+httpPost(url, body, headers)   // POST请求
+
+// 控制台
+console.log(...args)           // 日志输出
+console.error(...args)         // 错误输出
+console.warn(...args)          // 警告输出
+```
+
+### Python JS扩展函数
+
+```python
+from debugger.js_engine import LegadoJsExtensions
+
+# 编码函数
+encoded = LegadoJsExtensions.encode_uri("中文", "GBK")
+decoded = LegadoJsExtensions.decode_uri(encoded, "GBK")
+
+# Base64
+b64 = LegadoJsExtensions.base64_encode("hello")
+original = LegadoJsExtensions.base64_decode(b64)
+
+# JSON
+data = LegadoJsExtensions.json_parse('{"name": "test"}')
+json_str = LegadoJsExtensions.json_stringify(data)
+
+# 正则
+match = LegadoJsExtensions.regex_match("hello123world", "\\d+")
+replaced = LegadoJsExtensions.regex_replace("hello123world", "\\d+", "456")
+```
+
+### JS引擎执行环境
+
+Legado JS引擎模拟了以下环境：
+
+```javascript
+// Java模拟环境
+var java = {
+    lang: {
+        String: String,
+        Integer: Number,
+        Boolean: Boolean,
+        System: { out: { println: print } }
+    },
+    net: {
+        URLEncoder: { encode: encodeURIComponent },
+        URLDecoder: { decode: decodeURIComponent }
+    },
+    util: {
+        Base64: {
+            getEncoder: function() { return { encodeToString: btoa }; },
+            getDecoder: function() { return { decode: atob }; }
+        }
+    }
+};
+
+// Legado变量
+var result = '';      // 结果变量
+var baseUrl = '';     // 基础URL
+var source = {};      // 书源对象
+var content = '';     // 内容
+var src = '';         // 内容别名
+```
+
+### 执行流程
+
+```
+1. 用户书源规则包含 @js: 标记
+   ↓
+2. 提取JS代码部分
+   ↓
+3. 构建执行环境（上下文变量）
+   ↓
+4. 调用JS引擎执行
+   ↓
+5. 返回执行结果
+```
+
+### 完整调试示例
+
+```python
+from debugger.complete_debugger import CompleteDebugger
+
+# 加载书源
+debugger = CompleteDebugger(book_source_json)
+
+# 运行完整测试（包含JS执行）
+result = debugger.run_full_test("斗破苍穹")
+
+# 查看JS执行日志
+for js_log in result.js_execution_log:
+    print(f"JS代码: {js_log['code']}")
+    print(f"执行结果: {js_log['result']}")
+    print(f"是否成功: {js_log['success']}")
+
+# 查看Kotlin源码引用
+for ref in result.kotlin_source_references:
+    print(f"引用文件: {ref['name']}")
+    print(f"文件路径: {ref['file_path']}")
+    print(f"关联说明: {ref['relevance']}")
+
+# 输出完整JSON
+print(result.to_json())
+```
+
+### 注意事项
+
+1. **Node.js依赖** - 完整的JS执行需要安装Node.js
+2. **安全限制** - JS代码在沙箱环境中执行
+3. **超时控制** - 默认30秒超时
+4. **错误处理** - 详细的错误信息和堆栈跟踪
+
+### 安装Node.js（推荐）
+
+```bash
+# Windows
+winget install OpenJS.NodeJS
+
+# macOS
+brew install node
+
+# Linux
+sudo apt install nodejs
+
+# 验证安装
+node --version
+```
+
+### 不安装Node.js的替代方案
+
+```bash
+# 安装js2py（纯Python实现）
+pip install js2py
+```
+
+---
+
+## 📊 完整调试流程图
+
+```
+用户请求创建/调试书源
+         ↓
+┌────────────────────────────────────┐
+│         第一阶段：信息收集           │
+├────────────────────────────────────┤
+│ 1. 查询知识库 (search_knowledge)    │
+│ 2. 检测网站编码 (detect_charset)    │
+│ 3. 获取真实HTML (smart_fetch_html)  │
+│ 4. 分析HTML结构                     │
+│ 5. 引用Kotlin源码                   │
+└────────────────────────────────────┘
+         ↓
+┌────────────────────────────────────┐
+│         第二阶段：规则编写           │
+├────────────────────────────────────┤
+│ 1. 参考真实书源模板                 │
+│ 2. 参考真实书源分析结果             │
+│ 3. 编写CSS选择器规则                │
+│ 4. 编写正则表达式规则               │
+│ 5. 编写JS规则（如需要）             │
+│ 6. 严格验证规则语法                 │
+└────────────────────────────────────┘
+         ↓
+┌────────────────────────────────────┐
+│         第三阶段：创建调试           │
+├────────────────────────────────────┤
+│ 1. 创建完整书源JSON                 │
+│ 2. 调用调试引擎测试                 │
+│ 3. 执行JS规则（如需要）             │
+│ 4. 记录Kotlin源码引用               │
+│ 5. 输出测试结果                     │
+│ 6. 输出可导入的JSON                 │
+└────────────────────────────────────┘
+         ↓
+    返回完整结果给用户
+```
+
+---
+
+## 🎯 职责分工说明（重要！）
+
+### 📦 代码职责（debugger/）
+
+代码**只负责调试模拟模型**，不负责其他：
+
+| 职责 | 说明 |
+|------|------|
+| ✅ 调试模拟 | 基于真实Legado Kotlin代码翻译的模拟模型 |
+| ✅ 规则解析 | CSS选择器、XPath、JSONPath、正则表达式 |
+| ✅ HTTP请求 | 真实的网络请求测试 |
+| ✅ 返回Python对象 | 返回Python字典/对象，不输出JSON |
+| ❌ JSON输出 | 由技能包负责 |
+| ❌ 修复优化 | 由技能包负责 |
+| ❌ 文件保存 | 由技能包负责 |
+
+### 🧠 技能包职责（SKILL.md）
+
+技能包负责所有**用户交互和输出**：
+
+| 职责 | 说明 |
+|------|------|
+| ✅ JSON输出 | 将调试结果输出为JSON文件到根目录 |
+| ✅ 修复优化 | 根据调试结果修复和优化书源 |
+| ✅ 懒虫模式 | 一键配置好一条龙服务 |
+| ✅ 用户交互 | 与用户沟通，理解需求 |
+| ✅ 文件管理 | 保存书源JSON到指定位置 |
+
+---
+
+## 🚀 懒虫模式（一键配置）
+
+### 概述
+
+懒虫模式是为新手用户设计的**一键配置好一条龙服务**，只需提供网站URL，智能体自动完成所有工作。
+
+### 使用方法
+
+```
+用户：懒虫模式 https://www.example.com
+智能体：[自动完成以下所有步骤]
+```
+
+### 懒虫模式流程
+
+```
+用户提供网站URL
+       ↓
+┌─────────────────────────────────────────────┐
+│           智能体自动完成（无需用户干预）        │
+├─────────────────────────────────────────────┤
+│ 1. 检测网站编码                              │
+│ 2. 获取首页/搜索页HTML                       │
+│ 3. 分析网站结构                              │
+│ 4. 自动生成书源规则                          │
+│ 5. 调用调试引擎测试                          │
+│ 6. 根据测试结果修复优化                       │
+│ 7. 再次测试直到成功                          │
+│ 8. 输出JSON文件到根目录                      │
+│ 9. 提供导入说明                              │
+└─────────────────────────────────────────────┘
+       ↓
+   用户直接导入使用
+```
+
+### 懒虫模式示例
+
+```
+用户输入：
+懒虫模式 https://www.biquge.com
+
+智能体输出：
+✅ 已完成书源创建和测试！
+
+【书源信息】
+- 名称：笔趣阁
+- 地址：https://www.biquge.com
+- 测试结果：全部通过
+
+【JSON文件已保存】
+📄 文件位置：book_source_笔趣阁_20260307.json
+
+【导入方法】
+1. 打开Legado阅读APP
+2. 进入 书源管理 → 导入书源
+3. 选择上面的JSON文件
+4. 确认导入
+
+【测试结果】
+- 搜索：✅ 成功（找到10个结果）
+- 详情：✅ 成功（书名：斗破苍穹）
+- 目录：✅ 成功（1648章）
+- 正文：✅ 成功（内容正常）
+
+直接导入即可使用！
+```
+
+---
+
+## 📝 JSON输出规范
+
+### 输出位置
+
+所有书源JSON文件输出到**项目根目录**：
+
+```
+阅读Skill/
+├── book_source_笔趣阁_20260307.json      # 书源JSON
+├── book_source_69书吧_20260307.json      # 书源JSON
+├── debugger/                             # 调试引擎（不输出JSON）
+└── .trae/skills/.../SKILL.md             # 技能包
+```
+
+### 文件命名规范
+
+```
+book_source_{书源名称}_{日期}.json
+
+示例：
+book_source_笔趣阁_20260307.json
+book_source_69书吧_20260307.json
+book_source_起点中文网_20260307.json
+```
+
+### JSON格式规范
+
+```json
+[
+  {
+    "bookSourceName": "书源名称",
+    "bookSourceUrl": "https://www.example.com",
+    "bookSourceType": 0,
+    "searchUrl": "/search?q={{key}}",
+    "ruleSearch": {
+      "bookList": ".book-list .item",
+      "name": ".title@text",
+      "author": ".author@text",
+      "bookUrl": "a@href"
+    },
+    "ruleBookInfo": {
+      "name": "h1@text",
+      "author": ".author@text"
+    },
+    "ruleToc": {
+      "chapterList": "#chapters a",
+      "chapterName": "text",
+      "chapterUrl": "href"
+    },
+    "ruleContent": {
+      "content": "#content@html"
+    }
+  }
+]
+```
+
+---
+
+## 🎯 快速开始
+
+### 方式一：懒虫模式（推荐新手）
+
+```
+直接告诉智能体：
+懒虫模式 https://www.example.com
+
+智能体会自动完成所有工作，输出JSON到根目录
+```
+
+### 方式二：交互模式
+
+```
+告诉智能体：
+帮我为 https://www.example.com 创建书源
+
+智能体会：
+1. 分析网站结构
+2. 生成书源规则
+3. 调试测试
+4. 输出JSON
+```
+
+### 方式三：调试现有书源
+
+```
+告诉智能体：
+调试这个书源：{书源JSON}
+
+智能体会：
+1. 加载书源
+2. 运行测试
+3. 报告问题
+4. 提供修复方案
+5. 输出修复后的JSON
+```
+
+---
+
+## 📊 完整工作流程
+
+```
+用户请求
+    ↓
+┌─────────────────────────────────────────────┐
+│           技能包处理（SKILL.md）              │
+├─────────────────────────────────────────────┤
+│ 1. 理解用户需求                              │
+│ 2. 查询知识库                                │
+│ 3. 检测网站编码                              │
+│ 4. 获取HTML分析结构                          │
+│ 5. 生成书源规则                              │
+│ 6. 调用调试引擎测试 ──────────┐              │
+│                              ↓              │
+│                    ┌─────────────────────┐  │
+│                    │   调试引擎（代码）   │  │
+│                    ├─────────────────────┤  │
+│                    │ - 只负责调试模拟     │  │
+│                    │ - 返回Python对象     │  │
+│                    │ - 不输出JSON        │  │
+│                    └─────────────────────┘  │
+│                              ↓              │
+│ 7. 根据结果修复优化                          │
+│ 8. 再次测试（循环直到成功）                   │
+│ 9. 输出JSON到根目录                          │
+│ 10. 提供导入说明                             │
+└─────────────────────────────────────────────┘
+    ↓
+用户获得可导入的JSON文件
+```
+
+---
+
+## 🔧 调试引擎API（仅供技能包调用）
+
+### Python调用示例
+
+```python
+from debugger import debug_book_source, BookSource
+
+# 方式1：直接调试
+result = debug_book_source(book_source_dict, keyword="斗破苍穹")
+# 返回Python字典，不是JSON字符串
+
+# 方式2：使用BookSource对象
+source = BookSource.from_dict(book_source_dict)
+from debugger import DebugEngine
+engine = DebugEngine(source)
+result = engine.run_full_test("斗破苍穹")
+# 返回Python字典
+
+# 技能包负责将result转换为JSON并保存到根目录
+```
+
+### 返回值结构
+
+```python
+result = {
+    'book_source': '书源名称',
+    'url': 'https://...',
+    'keyword': '斗破苍穹',
+    'tests': {
+        'search': {'success': True, 'message': '...', ...},
+        'book_info': {'success': True, 'message': '...', ...},
+        'toc': {'success': True, 'message': '...', ...},
+        'content': {'success': True, 'message': '...', ...},
+    },
+    'overall_success': True,
+    'total_duration_ms': 1234.56,
+    'debug_log': [...],
+}
+
+# 技能包负责：
+# 1. 解析result
+# 2. 生成修复方案（如果失败）
+# 3. 输出JSON文件到根目录
+```
+
+---
+
+## ⚠️ 重要提醒
+
+### 代码不负责
+
+- ❌ 不输出JSON文件
+- ❌ 不修复书源问题
+- ❌ 不优化书源规则
+- ❌ 不保存文件到磁盘
+- ❌ 不处理用户交互
+
+### 技能包负责
+
+- ✅ 所有用户交互
+- ✅ JSON文件输出
+- ✅ 书源修复优化
+- ✅ 懒虫模式服务
+- ✅ 文件保存管理

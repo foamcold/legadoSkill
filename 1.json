@@ -1,0 +1,53 @@
+{
+  "bookSourceComment": "by天天的鸟蛋蛋\n阅读云（sososhu）搜索系列\n2025/3/15",
+  "bookSourceName": "精武小说",
+  "bookSourceType": 0,
+  "bookSourceUrl": "https://www.jwxs.org/",
+  "customButton": false,
+  "customOrder": 91,
+  "enabled": true,
+  "enabledCookieJar": true,
+  "enabledExplore": false,
+  "eventListener": false,
+  "exploreUrl": "玄幻::/fenlei/{{page}}/1/\n奇幻::/fenlei/2/{{page}}/\n武侠::/fenlei/3/{{page}}/\n仙侠::/fenlei/4/{{page}}/\n都市::/fenlei/5/{{page}}/\n军事::/fenlei/6/{{page}}/\n历史::/fenlei/7/{{page}}/\n游戏::/fenlei/8/{{page}}/\n竞技::/fenlei/9/{{page}}/\n科幻::/fenlei/10/{{page}}/\n悬疑::/fenlei/11/{{page}}/\n灵异::/fenlei/12/{{page}}/\n其他::/fenlei/13/{{page}}/\n古代::/fenlei/14/{{page}}/\n仙侠::/fenlei/15/{{page}}/\n现代::/fenlei/16/{{page}}/\n浪漫::/fenlei/17/{{page}}/\n玄幻::/fenlei/18/{{page}}/\n悬疑::/fenlei/19/{{page}}/\n科幻::/fenlei/20/{{page}}/\n游戏::/fenlei/21/{{page}}/\nBL::/fenlei/22/{{page}}/\nGL::/fenlei/23/{{page}}/\n二次::/fenlei/24/{{page}}/\n热门::/rank/allvisit/",
+  "lastUpdateTime": 1747656811380,
+  "respondTime": 6156,
+  "ruleBookInfo": {
+    "author": "[property$=author]@content",
+    "coverUrl": "[property$=image]@content",
+    "intro": "[property$=description]@content",
+    "kind": "[property~=category|status|update_time]@content",
+    "lastChapter": "[property$=lastest_chapter_name]@content",
+    "name": "[property$=book_name]@content",
+    "tocUrl": "text.章节目录@href"
+  },
+  "ruleContent": {
+    "content": "#booktxt@html",
+    "nextContentUrl": "text.下一页@href"
+  },
+  "ruleExplore": {
+    "author": "span@text##著",
+    "bookList": ".item",
+    "bookUrl": "dl>dt>a@href",
+    "coverUrl": "dl>dt>a@href\n<js>\nvar id = result.match(/(\\d+)\\/?$/)[1];\nvar iid = parseInt(id/1000);\nsource.key +'/images/'+iid+'/'+id+'/'+id+'s.jpg';\n</js>",
+    "intro": "dd@text",
+    "name": "dl>dt>a@text"
+  },
+  "ruleSearch": {
+    "author": "span@text",
+    "bookList": "<js>\nif (result.match(/阅读云/)) {\n   u = baseUrl.split(',')[0]\n   cookie.removeCookie(u)\n   // java.startBrowserAwait(u, \"验证\")\n   java.webView(null, u, \"document.cookie\")\n   ck = cookie.getCookie(u)\n   head = JSON.stringify({ headers: { 'Cookie': ck } })\n   url = u + \",\" + head\n   result = java.ajax(url)\n}\nresult\n</js>\n.block > div > div:nth-child(n+1)",
+    "bookUrl": "a@href",
+    "coverUrl": "img@src",
+    "intro": "dd@text",
+    "name": "a@text"
+  },
+  "ruleToc": {
+    "chapterList": "#content_1@a",
+    "chapterName": "text",
+    "chapterUrl": "href",
+    "nextTocUrl": "option@value"
+  },
+  "searchUrl": "https://www.sososhu.com/?site=1&q={{key}},{\n  headers: { \"User-Agent\": \"Mozilla/5.0 (Linux; Android 10; PACM00 Build/QP1A.190711.020) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.79 Mobile Safari/537.36\" }",
+  "weight": 0
+}
+

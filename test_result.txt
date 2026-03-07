@@ -1,0 +1,89 @@
+============================================================
+ Legado Book Source Debugger
+============================================================
+Book Source: 精武小说
+URL: https://www.jwxs.org/
+JS Lib: No
+Keyword: 我的
+Time: 2026-03-07 21:31:55
+============================================================
+
+============================================================
+ [1] Search Test
+============================================================
+[31:57.585] [搜索] 请求URL: https://www.sososhu.com/?site=1&q=%E6%88%91%E7%9A%84
+[31:57.585] [搜索] 请求方式: GET
+[31:57.585] [搜索] 获取到HTML内容，长度: 1703
+[31:57.585] [搜索] ≡HTML预览: <!DOCTYPE html>
+<html>
+<head>
+<title></title>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
+<style type="text/css">
+.ui-uam-box  {
+	text-align: center;
+	font-family: font-family: Roboto,"Helvetica Neue Light","Helvetica Neue",Helvetica,Arial,"Lucida Grande",sans-serif;
+	font-size: 16px;
+}
+
+.ui-uam-box .ui-counter {
+	font-weight: bold;
+}
+
+</style>
+<script type="text/javascript">
+var cpk = "ge_ua_p"
+var step = "prev";
+var nonce = 4017
+[31:57.585] [搜索] 找到 0 个搜索结果
+[31:57.585] [搜索] ◇未找到搜索结果，可能原因:
+[31:57.585] [搜索]   1. 网站结构已变化，规则需要更新
+[31:57.585] [搜索]   2. 搜索关键词没有匹配结果
+[31:57.585] [搜索]   3. 网站返回了错误页面或验证码
+[31:57.585] [搜索]   4. 规则 '<js>
+if (result.match(/阅读云/)) {
+   u = baseUrl.split(',')[0]
+   cookie.removeCookie(u)
+   // java.startBrowserAwait(u, "验证")
+   java.webView(null, u, "document.cookie")
+   ck = cookie.getCookie(u)
+   head = JSON.stringify({ headers: { 'Cookie': ck } })
+   url = u + "," + head
+   result = java.ajax(url)
+}
+result
+</js>
+.block > div > div:nth-child(n+1)' 可能不匹配当前页面结构
+[31:57.585] [搜索] ≡页面标题: 
+[31:57.585] [搜索] ≡页面主要结构:
+[31:57.585] [搜索]   未找到常见的列表容器
+[31:57.585] [搜索] Success: True
+[31:57.585] [搜索] Message: 搜索测试成功，找到 0 个结果
+
+============================================================
+ [2] Book Info Test
+============================================================
+[32:01.757] [详情] Success: False
+[32:01.757] [详情] Message: 书籍详情测试失败：搜索无结果
+
+============================================================
+ [3] Toc Test
+============================================================
+[32:11.030] [目录] Success: False
+[32:11.030] [目录] Message: 目录测试失败：无法获取书籍信息
+
+============================================================
+ [4] Content Test
+============================================================
+[32:13.070] [正文] Success: False
+[32:13.070] [正文] Message: 正文测试失败：无法获取章节列表
+
+============================================================
+ Summary
+============================================================
+[32:13.070] [汇总] Search: PASS
+[32:13.070] [汇总] Book Info: FAIL
+[32:13.070] [汇总] Toc: FAIL
+[32:13.070] [汇总] Content: FAIL
+[32:13.070] [汇总] Overall: SOME FAILED
