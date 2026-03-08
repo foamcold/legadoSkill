@@ -3,9 +3,9 @@
     "bookSourceName": "笔趣阁bqgui",
     "bookSourceUrl": "https://www.bqgui.cc",
     "bookSourceType": 0,
-    "bookSourceComment": "笔趣阁小说站，搜索返回JSON格式，正文通过API获取。正文页有验证机制，首次访问需要等待验证完成。验证后会自动切换到新域名。搜索比较麻烦，搜出来的只是1，不是真正的api内容",
+    "bookSourceComment": "笔趣阁小说站，搜索返回JSON格式，正文通过API获取。正文页有验证机制，首次访问需要等待验证完成。验证后会自动切换到新域名。使用发现功能可以浏览各分类书籍。",
     "searchUrl": "/user/search.html?q={{key}}",
-    "exploreUrl": "玄幻::/json?sortid=1&page={{page}}\n武侠::/json?sortid=2&page={{page}}\n都市::/json?sortid=3&page={{page}}\n历史::/json?sortid=4&page={{page}}\n网游::/json?sortid=5&page={{page}}\n科幻::/json?sortid=6&page={{page}}\n女生::/json?sortid=7&page={{page}}",
+    "exploreUrl": "玄幻::/json?sortid=1&page={{page}}\n武侠::/json?sortid=2&page={{page}}\n都市::/json?sortid=3&page={{page}}\n历史::/json?sortid=4&page={{page}}\n网游::/json?sortid=5&page={{page}}\n科幻::/json?sortid=6&page={{page}}\n女生::/json?sortid=7&page={{page}}\n完本::/json?sortid=8&page={{page}}",
     "ruleSearch": {
       "bookList": "$.[*]",
       "name": "$.articlename",
