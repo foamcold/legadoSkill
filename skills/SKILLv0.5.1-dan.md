@@ -1074,6 +1074,81 @@ smart_fetch_html(
 3. **信息合并**：使用正则表达式拆分
 4. **多个同名标签**：使用`:first-child`和`:last-child`区分
 5. **无简介**：`"intro": ""`
+6. **Cloudflare验证**：添加`loginCheckJs`字段（详见下方Cloudflare验证处理章节）
+
+---
+
+## 🛡️ Cloudflare验证检测与处理
+
+### 检测条件
+
+获取HTML时如果遇到以下情况，说明网站有Cloudflare保护：
+
+1. **HTTP状态码异常**：403、502、503
+2. **页面内容特征**：包含 "Just a moment"、"Checking your browser"、"DDoS protection"
+3. **首次访问需要等待5秒验证**
+4. **搜索功能返回空内容或验证页面**
+
+### 处理方法
+
+在书源JSON中添加 `loginCheckJs` 字段：
+
+```javascript
+"loginCheckJs": "(function(a){var r=a.url(),o=a.body(),t=a.code();if(o&&(403===t||503===t||502===t||200===t&&(o.includes('Just a moment')||o.includes('Checking your browser')))){var c=source.get('cf_count')||'0';c=parseInt(c)+1;source.put('cf_count',c);if(c<=3){for(var i=0;i<2;i++){try{var h=java.webView(r,r,'setTimeout(function(){window.legado.getHTML(document.documentElement.outerHTML);},5000);');if(h&&!h.includes('Just a moment')&&200===java.connect(r).code()){source.put('cf_count','0');return a}}catch(e){}}}java.toast('需要CloudFlare验证');java.startBrowserAwait(r,'验证');source.put('cf_count','0');return java.connect(r)}return a})(result)"
+```
+
+### 工作原理
+
+1. **检测验证页面**：检查HTTP状态码和页面内容
+2. **自动重试**：最多自动重试3次，使用WebView等待5秒
+3. **手动验证**：自动重试失败后，弹出浏览器让用户手动验证
+4. **计数器机制**：使用`source.put/get`记录重试次数，避免无限循环
+
+### 完整示例
+
+```json
+{
+  "bookSourceName": "示例书源",
+  "bookSourceUrl": "https://www.example.com",
+  "loginCheckJs": "(function(a){var r=a.url(),o=a.body(),t=a.code();if(o&&(403===t||503===t||502===t||200===t&&(o.includes('Just a moment')||o.includes('Checking your browser')))){var c=source.get('cf_count')||'0';c=parseInt(c)+1;source.put('cf_count',c);if(c<=3){for(var i=0;i<2;i++){try{var h=java.webView(r,r,'setTimeout(function(){window.legado.getHTML(document.documentElement.outerHTML);},5000);');if(h&&!h.includes('Just a moment')&&200===java.connect(r).code()){source.put('cf_count','0');return a}}catch(e){}}}java.toast('需要CloudFlare验证');java.startBrowserAwait(r,'验证');source.put('cf_count','0');return java.connect(r)}return a})(result)",
+  "searchUrl": "/search?q={{key}}",
+  "ruleSearch": {
+    "bookList": ".book-item",
+    "name": ".title@text",
+    "bookUrl": "a@href"
+  }
+}
+```
+
+### 使用场景
+
+| 场景 | 是否需要loginCheckJs |
+|------|---------------------|
+| 网站返回403/503错误 | ✅ 需要 |
+| 页面显示"Just a moment" | ✅ 需要 |
+| 页面显示"Checking your browser" | ✅ 需要 |
+| 正常网站 | ❌ 不需要 |
+| 需要登录的网站 | ❌ 使用loginUrl字段 |
+
+### 记忆口诀
+
+```
+Cloudflare验证看状态，
+403、503要警惕。
+页面包含Just a moment，
+loginCheckJs来处理。
+自动重试三次数，
+失败弹出浏览器。
+验证通过继续读，
+书源功能更完善。
+```
+
+### ⚠️ 注意事项
+
+1. **不是所有网站都需要**：只有遇到Cloudflare验证时才添加此字段
+2. **可能需要手动验证**：自动重试失败后需要用户手动完成验证
+3. **验证后Cookie生效**：验证成功后Cookie会被保存，后续访问正常
+4. **不要滥用**：正常网站不要添加此字段，会增加不必要的开销
 
 ### 步骤4：最后审查
 
@@ -1964,6 +2039,43 @@ smart_fetch_html(
   "searchUrl": "必填",        // 搜索URL（字符串，不能为空）
 }
 ```
+
+**书源级别可选字段**：
+
+```js
+{
+  "loginCheckJs": "可选",     // Cloudflare验证检测JS（字符串，用于处理CF验证）
+  "loginUrl": "可选",         // 登录URL（字符串，用于需要登录的网站）
+  "loginUi": "可选",          // 登录界面配置（字符串，自定义登录表单）
+  "bookSourceType": "可选",   // 书源类型（数字，0=文字，1=音频，2=图片）
+  "bookSourceComment": "可选", // 书源说明（字符串，书源描述信息）
+  "enabled": "可选",          // 是否启用（布尔值，默认true）
+  "enabledExplore": "可选",   // 是否启用发现（布尔值，默认true）
+  "exploreUrl": "可选",       // 发现URL（字符串，分类导航配置）
+  "ruleExplore": "可选",      // 发现规则（对象，分类页面解析规则）
+}
+```
+
+**loginCheckJs 字段详解**：
+
+用于处理Cloudflare等反爬验证，当网站返回验证页面时自动处理。
+
+| 字段 | 类型 | 说明 | 使用场景 |
+|------|------|------|----------|
+| `loginCheckJs` | String | 验证检测JS代码 | 网站有Cloudflare保护 |
+
+**使用示例**：
+```json
+{
+  "bookSourceName": "受保护网站",
+  "bookSourceUrl": "https://example.com",
+  "loginCheckJs": "(function(a){var r=a.url(),o=a.body(),t=a.code();if(o&&(403===t||503===t||502===t||200===t&&(o.includes('Just a moment')||o.includes('Checking your browser')))){...}return a})(result)"
+}
+```
+
+**⚠️ 重要区分**：
+- `loginCheckJs`：用于Cloudflare等验证码/反爬处理
+- `loginUrl` + `loginUi`：用于需要账号登录的网站
 
 **规则级别必填字段**：
 
@@ -4297,7 +4409,7 @@ COMMON_SELECTORS = {
 | 变量名 | 类型 | 说明 |
 |--------|------|------|
 | `java` | 当前类 | 主要功能入口，万能工具箱 |
-| `baseUrl` | String | 当前URL |
+| `baseUrl` | String | 当前页面URL |
 | `result` | Any | 上一步结果 |
 | `book` | Book类 | 书籍信息操作 |
 | `chapter` | Chapter类 | 章节信息操作 |
@@ -4488,6 +4600,195 @@ java.log("调试信息")              // 输出日志
 java.logType(variable)            // 输出类型
 java.toast("提示信息")            // 短时提示
 java.longToast("长提示")          // 长时提示
+
+---
+
+## 🔍 API发现核心技巧（重要！）
+
+### 核心原则
+
+**API发现是书源开发中最关键的一步，直接决定了书源的质量和性能。**
+
+### ⚠️ 正确方法：分析JS代码找API
+
+**❌ 错误做法**：盲目猜测测试
+```python
+# ❌ 不要这样做！效率低、浪费时间
+search_urls = [
+    '/search.php?q=xxx',      # 猜测1
+    '/search?keyword=xxx',    # 猜测2
+    '/api/search?q=xxx',      # 猜测3
+]
+```
+
+**✅ 正确做法**：分析JS代码找API
+```python
+# ✅ 第一步：获取首页HTML
+response = requests.get('https://www.bqgui.cc')
+html = response.text
+
+# ✅ 第二步：查找外部JS文件
+import re
+js_file_pattern = r'<script[^>]*src=["\']([^"\']+\.js[^"\']*)["\']'
+js_files = re.findall(js_file_pattern, html)
+
+# ✅ 第三步：分析JS文件，查找API调用
+for js_file in js_files:
+    js_response = requests.get(js_file)
+    js_content = js_response.text
+    
+    # 查找API调用
+    api_patterns = [
+        r'\$\.ajax\(["\']([^"\']+)["\']',      # $.ajax('url')
+        r'\$\.get\(["\']([^"\']+)["\']',       # $.get('url')
+        r'\$\.post\(["\']([^"\']+)["\']',      # $.post('url')
+        r'getJSON\(["\']([^"\']+)["\']',       # getJSON('url')
+    ]
+    
+    for pattern in api_patterns:
+        matches = re.findall(pattern, js_content)
+        if matches:
+            print(f"✅ 发现API: {matches}")
+```
+
+### 实战案例：笔趣阁API发现
+
+**问题**：主域名 `www.bqgui.cc` 的正文页有验证机制
+
+**正确方法**：
+```python
+# 第一步：分析JS文件
+js_file = 'https://www.bqgui.cc/js/compc.js?v=1.23'
+js_content = requests.get(js_file).text
+
+# 第二步：查找API调用
+import re
+pattern = r'getJSON\(["\']([^"\']+)["\']'
+apis = re.findall(pattern, js_content)
+# 发现：['/json_book?id=']
+
+# 第三步：测试发现的API
+api_url = 'https://www.bqgui.cc/json_book?id=66'
+response = requests.get(api_url)
+# 返回JSON数据 ✅
+```
+
+**关键发现**：
+- `/json_book?id=` - 返回章节列表（JSON格式）
+- 从JS代码中直接发现，无需猜测！
+
+### API发现三步法
+
+```
+第一步：获取首页HTML，查找外部JS文件
+  → <script src="/js/main.js">
+  → <script src="/js/api.js">
+
+第二步：分析JS文件，查找API调用
+  → $.ajax('/api/chapter')
+  → getJSON('/json_book?id=')
+  → fetch('/api/content')
+
+第三步：测试发现的API
+  → 验证API是否可用
+  → 分析返回数据格式
+```
+
+### 核心技巧
+
+1. **不要猜测，要分析**
+   ```
+   ❌ 盲目测试各种URL格式
+   ✅ 分析JS代码找API调用
+   ```
+
+2. **备用域名也有API**
+   ```
+   主域名API失败 → 分析备用域名的JS代码
+   备用域名往往有惊喜
+   ```
+
+3. **从验证页面发现备用域名**
+   ```javascript
+   var html = java.webView(url, url, 'setTimeout(function(){window.legado.getHTML(document.documentElement.outerHTML);},5000);');
+   var match = html.match(/https?:\/\/([\w\-\.]+)\//);
+   if(match){
+       source.setVariable(match[1]);  // 保存备用域名
+   }
+   ```
+
+### 记忆口诀
+
+```
+API发现别瞎猜，
+先看JS代码来。
+外部文件要分析，
+ajax/get/post找出来。
+直接测试发现的API，
+效率提升好几倍！
+```
+
+---
+
+## ⚠️ java.webView 的 JavaScript 限制（重要！）
+
+### 核心原则
+
+**java.webView() 的 js 参数只能写纯 JavaScript ES5 和部分 ES6 代码，不能使用 DOM 和 BOM API。**
+
+### 原因说明
+
+Legado 使用 **Rhino 1.8.0** JavaScript 引擎执行代码，有以下限制：
+
+| 特性 | 支持 | 说明 |
+|------|------|------|
+| **ES5 语法** | ✅ 完全支持 | var、function、基本语法 |
+| **部分 ES6** | ⚠️ 部分支持 | let、const（有作用域问题）、箭头函数 |
+| **DOM API** | ❌ 不支持 | document、window、getElementById等 |
+| **BOM API** | ❌ 不支持 | location、history、navigator等 |
+
+### 关键理解
+
+**执行环境切换**：
+```
+js参数在浏览器环境中执行 → 可以使用DOM/BOM
+返回后在Rhino环境中处理 → 只能用ES5语法
+```
+
+### 正确用法示例
+
+```javascript
+// ✅ 正确：js参数在浏览器环境中执行
+java.webView(html, url, 
+    'setTimeout(function(){' +
+    '  var html = document.documentElement.outerHTML;' +  // 浏览器环境，可以使用DOM
+    '  window.legado.getHTML(html);' +
+    '}, 5000);'
+);
+
+// ✅ 正确：返回后在Rhino环境中处理
+var html = java.webView(html, url, js);
+var content = html.replace(/<script[\s\S]*?<\/script>/g, '');  // Rhino环境，只能用ES5
+```
+
+### 最佳实践
+
+1. **使用 var 而不是 let/const**（避免作用域问题）
+2. **使用传统函数而不是箭头函数**（更稳定）
+3. **在 js 参数中使用浏览器 API，返回后在 Rhino 中处理**
+
+### 记忆口诀
+
+```
+WebView的js参数，
+浏览器环境执行。
+返回后的处理，
+Rhino环境执行。
+只能用ES5语法，
+var和function最稳。
+环境分清楚，
+各司其职好！
+```
 
 ---
 
@@ -4836,7 +5137,66 @@ JS代码找API。
 步骤5: 成功！
 ```
 
+##### 9. 验证机制检测与处理（loginCheckJs通用方案）
 
+**用户需求**：为书源编写SKILL添加Cloudflare验证检测与处理功能
+
+**吸收内容**：
+- 新增 `loginCheckJs` 字段用于处理Cloudflare验证
+- 检测条件：HTTP状态码403/502/503，页面包含"Just a moment"、"Checking your browser"
+- 处理流程：自动重试3次 → WebView等待5秒 → 失败后弹出浏览器手动验证
+- 新增专门章节：`🛡️ Cloudflare验证检测与处理`
+- 新增书源可选字段说明：`loginCheckJs`、`loginUrl`、`loginUi`等
+
+**转化为口诀**：
+```
+loginCheckJs是通用，
+验证检测看特征。
+状态码、关键词，
+根据网站来调整。
+自动重试三次数，
+失败弹出浏览器。
+修改条件适配好，
+各种验证都能搞！
+```
+
+**常见验证类型与检测条件**：
+
+| 验证类型 | 状态码 | 关键词检测 |
+|---------|--------|-----------|
+| Cloudflare | 403/502/503 | `o.includes('Just a moment')` |
+| 自定义加载页 | 200 | `o.includes('加载中')` |
+| 验证跳转 | 200 | `o.includes('userverify')` |
+| 需要登录 | 200 | `o.includes('请登录')` |
+| 空内容异常 | 200 | `o.length < 100` |
+
+**通用代码模板**（修改检测条件即可适配不同验证）：
+```javascript
+"loginCheckJs": "(function(a){var r=a.url(),o=a.body(),t=a.code();if(o&&【检测条件】){var c=source.get('v_count')||'0';c=parseInt(c)+1;source.put('v_count',c);if(c<=3){try{var h=java.webView(r,r,'setTimeout(function(){window.legado.getHTML(document.documentElement.outerHTML);},3000);');if(h&&!【验证关键词】){source.put('v_count','0');return java.connect(r)}}catch(e){}}java.toast('需要验证');java.startBrowserAwait(r,'验证');source.put('v_count','0');return java.connect(r)}return a})(result)"
+```
+
+**示例1 - Cloudflare验证**：
+```javascript
+// 检测条件：(403===t||503===t||502===t||200===t&&(o.includes('Just a moment')||o.includes('Checking your browser')))
+// 验证关键词：'Just a moment'
+```
+
+**示例2 - 自定义验证（加载中/userverify）**：
+```javascript
+// 检测条件：(200===t&&(o.includes('加载中')||o.includes('userverify')))
+// 验证关键词：'加载中'、'userverify'
+```
+
+**使用流程**：
+```
+1. 分析网站验证机制 → 确定状态码和页面特征关键词
+    ↓
+2. 修改检测条件 → 替换模板中的【检测条件】
+    ↓
+3. 修改验证关键词 → 替换模板中的【验证关键词】
+    ↓
+4. 测试验证 → 确保正常工作
+```
 
 ### 知识吸收检查清单
 

@@ -88,8 +88,14 @@ legadoSkill/
 │   │   ├── book.html               # 详情页HTML
 │   │   └── content.html            # 正文页HTML
 │   └── ...
+├── 笔趣阁m.bqg5.json              # 书源JSON文件（输出）
+├── 起点中文网.json                # 书源JSON文件（输出）
+├── 其他书源.json                  # 书源JSON文件（输出）
 ├── .trae/skills/legado-book-source-tamer/
 │   └── SKILL.md                    # 本技能包
+├── config/
+│   ├── system_prompt.md            # 系统提示词（完整工作流程）
+│   └── system/prompt.md            # 详细提示词（规则规范）
 ├── debugger/                       # 🔧 通用调试工具（优先使用！）
 │   ├── test_universal.py           # 通用测试入口
 │   ├── engine/
@@ -114,47 +120,22 @@ legadoSkill/
 │   ├── ESSENTIAL_KNOWLEDGE_SUMMARY.md
 │   ├── PROJECT_ARCHITECTURE.md
 │   └── ...
-├── config/                         # ⚙️ 早期配置文件
-│   ├── system_prompt.md
-│   └── system/prompt.md
-├── assets/                         # 📚 知识库
-│   ├── legado_knowledge_base.md
-│   ├── css选择器规则.txt
-│   ├── 书源规则：从入门到入土.md
-│   └── knowledge_base/book_sources/
-└── ...
-```
-
-### 🚨 文件创建规则（必须遵守！）
-
-**所有临时文件、缓存文件、书源JSON必须创建在 `temp/` 目录下！**
-
-| 文件类型 | 创建位置 | 示例 |
-|---------|---------|------|
-| 书源JSON | `temp/书源名称/书源名称.json` | `temp/无限小说网/无限小说网.json` |
-| HTML缓存 | `temp/书源名称/xxx.html` | `temp/无限小说网/search.html` |
-| Python脚本 | `temp/xxx.py` | `temp/fetch_data.py` |
-| 测试文件 | `temp/xxx.txt` | `temp/test_result.txt` |
-
-### 🔧 工具调用优先级
-
-1. **优先使用内置工具**：`debugger/` 目录下的调试模块
-2. **参考官方源码**：`legado/` 目录下的Kotlin源码是权威
-3. **不要创建新工具**：如果技能包里有工具，就用技能包里的
-4. **知识库查询**：`assets/` 目录下的知识文档
-
-### 📂 目录用途速查
-
-| 目录 | 用途 | 是否可写 |
-|------|------|---------|
-| `temp/` | 缓存文件、书源输出 | ✅ 可写 |
-| `debugger/` | 调试工具 | ❌ 只读 |
-| `legado/` | 官方源码参考 | ❌ 只读 |
-| `skills/` | 技能包版本 | ❌ 只读 |
-| `docs/` | 说明文档 | ❌ 只读 |
-| `config/` | 配置文件 | ❌ 只读 |
-| `assets/` | 知识库 | ❌ 只读 |
-
+├── assets/                         # 📚 知识库（核心资源）
+│   ├── legado_knowledge_base.md    # 完整知识库
+│   ├── css选择器规则.txt           # CSS选择器规则
+│   ├── 书源规则：从入门到入土.md    # 详细教程
+│   ├── 真实书源模板库.txt           # 真实模板
+│   ├── 真实书源高级功能分析.md      # 高级功能
+│   ├── 智能体自我认知.md            # 智能体认知
+│   ├── 智能体常用话术库.md          # 话术模板
+│   ├── 智能体输出格式优化指南.md    # 输出格式
+│   ├── 书源输出模板_严格模式.md    # 严格模板
+│   ├── 活力宝的书源日记231224.txt  # 实战技巧
+│   ├── 方法-JS扩展类.md            # JS扩展方法
+│   ├── 方法-加密解密.md            # 加密解密
+│   ├── 方法-登录检查JS.md          # 登录检查
+│   └── knowledge_base/book_sources/ # 1751个真实书源案例
+└── test_result.txt                 # 测试结果输出
 ---
 
 ## 📋 项目概述
@@ -4825,6 +4806,37 @@ var和function最稳。
 - 文件名格式：`{书源名称}.json`
 - 保存路径：`legadoSkill/{书源名称}.json`
 
+### 核心原则
+
+**当用户提供新知识、纠正错误、分享经验时，必须自动吸收并转化为技能包内容。**
+
+### 自动进化流程
+
+```
+用户提供知识
+    ↓
+验证知识正确性
+    ↓
+转化为口诀/规则
+    ↓
+添加到技能包对应章节
+    ↓
+更新检查清单
+```
+
+### 本次进化记录
+
+#### 📅 2026-03-08 进化内容
+
+##### 1. 输出JSON文件到根目录
+
+**用户反馈**：要把JSON文件输出到根目录
+
+**吸收内容**：
+- 第三阶段步骤3新增：将书源JSON文件保存到项目根目录
+- 文件名格式：`{书源名称}.json`
+- 保存路径：`legadoSkill/{书源名称}.json`
+
 **转化为口诀**：
 ```
 书源创建完成后，
@@ -5377,6 +5389,5 @@ JSON.stringify返回串，
 ```
 
 ---
-
 **技能包会持续进化，每次对话中的知识点都会被吸收和整合！**
 
