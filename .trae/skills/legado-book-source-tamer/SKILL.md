@@ -2912,6 +2912,43 @@ CSS选择器@提取类型##正则表达式##替换内容
 - `.-2` - 倒数第二个元素
 - `.[0:5]` - 第0到第5个元素
 
+### ⚠️ 数字索引使用规则（非常重要！）
+
+**核心原则**：CSS选择器语法不支持数字索引（如 `.section-box.-1`），必须使用Default规则语法！
+
+**❌ 错误写法（CSS选择器语法不支持）**：
+```
+.section-box.-1 .section-list li a
+.section-list.-1 li a
+```
+
+**✅ 正确写法（Default规则语法）**：
+```
+class.section-box.-1@class.section-list@tag.li@tag.a
+```
+
+**关键区别**：
+| 语法 | 说明 | 是否支持数字索引 |
+|------|------|-----------------|
+| CSS选择器 | `.class1 .class2` 用空格分隔 | ❌ 不支持 `.-1` |
+| Default规则 | `class.xxx@class.yyy` 用@分隔 | ✅ 支持 `.0`, `.-1` 等 |
+
+**使用场景**：
+- 当需要选择"最后一个匹配元素"时，必须使用Default规则语法
+- 例如：选择最后一个section-box下的章节列表
+
+**示例对比**：
+```json
+// ❌ 错误：CSS选择器不支持 .-1
+    "chapterList": ".section-box.-1 .section-list li a"
+
+// ✅ 正确：Default规则支持 .-1
+    "chapterList": "class.section-box.-1@class.section-list@tag.li@tag.a"
+
+```
+
+
+
 ### 正则表达式格式
 
 ```
