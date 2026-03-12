@@ -600,7 +600,7 @@ var body = "keyword=" + String(key);
 
 #### 📌 用户需求询问（重要！必须先询问！）
 
-**当用户提供网址要求创建书源时，必须先询问以下问题，10秒内要是没有回复，自动结束会话，按不需要发现规则和不需要正则净化往下走**：
+**当用户提供网址要求创建书源时，必须先询问以下问题，要是没有回复，按不需要发现规则和正则往下执行**：
 
 ```
 收到网址：[用户提供的网址]
@@ -834,29 +834,28 @@ smart_fetch_html(
 | `/sort/1_1.html` | `/sort/1_{{page}}.html` | `/sort/1_{{page}}/` ❌ |
 | `/category/xuanhuan/1` | `/category/xuanhuan/{{page}}` | `/category/xuanhuan/{{page}}/` ❌ |
 
-### 发现规则JSON结构
-
+### 基本格式
 ```json
 {
-  "exploreUrl": "玄幻::/sort/1_{{page}}/\n修真::/sort/2_{{page}}/\n都市::/sort/3_{{page}}/",
+  "exploreUrl": "分类名::/实际/URL/格式_{{page}}/\n分类 2::/url2_{{page}}.html",
   "ruleExplore": {
     "bookList": ".book-item",
     "name": ".title@text",
-    "author": ".author@text",
-    "bookUrl": "a@href",
-    "coverUrl": "img@src",
-    "lastChapter": ".last-chapter@text"
+    "bookUrl": "a@href"
   }
 }
 ```
 
-### 记忆口诀
+### 关键点
+1. 从首页导航菜单找到分类链接
+2. 如果有排行榜，也需要添加到exploreUrl中，如果规则冲突优先考虑分类链接
+2. 用 `{{page}}` 替换页码数字
+3. 保持原有后缀（.html 或/）不变
+4. 如果网站只有一页发现或者下一页里没有书，则不需要加 `{{page}}`
 
-```
-导航菜单看仔细，
-实际链接是依据。
-斜杠点html要分清，
-不能凭空加后缀！
+### 注意事项
+- ⚠️ 发现规则是可选的，用户明确要求才添加
+- ⚠️ 不要臆造 URL 格式，必须以实际链接为准
 ```
 
 ---
@@ -4596,17 +4595,8 @@ response = requests.get(api_url)
        source.setVariable(match[1]);  // 保存备用域名
    }
    ```
-
-### 记忆口诀
-
-```
-API发现别瞎猜，
-先看JS代码来。
-外部文件要分析，
-ajax/get/post找出来。
-直接测试发现的API，
-效率提升好几倍！
-```
+  
+4. **有时可能需要特殊的请求头或者需要cookie**
 
 ---
 
@@ -4774,15 +4764,6 @@ GBK编码要声明，
 - 功能：在 `temp` 文件夹下创建书源名称子文件夹，统一管理相关文件
 - 支持会话模式：可在对话过程中注册文件，最后统一整理
 
-**转化为口诀**：
-```
-书源创建完成后，
-文件整理自动化。
-temp文件夹下建，
-书源名称子目录。
-JSON、HTML、Python脚本，
-统一整理归一处。
-```
 
 **使用示例**：
 ```python
@@ -4819,15 +4800,6 @@ result = organize_book_source_files(book_source_name="笔趣阁hk", session_id=s
 - 在步骤3末尾添加警告提醒
 - 在步骤4标题添加 🚨 强调标记
 
-**转化为口诀**：
-```
-步骤三保存是临时，
-步骤四整理必须做。
-RunCommand调Python，
-文件整理自动化。
-根目录文件要移动，
-temp文件夹是归宿。
-```
 
 **正确流程**：
 ```
@@ -4864,13 +4836,6 @@ temp文件夹是归宿。
 - Legado 会自动合并这些分页的内容
 - 选择器格式：`text.下一页@href`（使用 Default 语法的 `text.文本` 格式）
 
-**转化为口诀**：
-```
-正文分页看按钮，
-下一页是同章翻。
-nextContentUrl要配置，
-Legado自动合并文。
-```
 
 **示例**：
 ```json
@@ -5118,10 +5083,6 @@ loginCheckJs是通用，
 - 具体知识点1
 - 具体知识点2
 
-**转化为口诀**：
-```
-口诀内容
-```
 
 **示例代码**（如有）：
 ```js
