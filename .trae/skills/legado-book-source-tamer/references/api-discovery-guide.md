@@ -22,7 +22,7 @@
 ## API发现三步法
 
 ```
-第一步：获取首页HTML，现在里面查找api或者某些特殊变量
+第一步：获取首页HTML，先在里面的js代码里找api或某些特殊变量
 
 第二步：在首页HTML,查找外部JS文件
   → <script src="/js/main.js">
@@ -33,6 +33,7 @@
   → $.ajax('/api/chapter')
   → getJSON('/json_book?id=')
   → fetch('/api/content')
+  → 等等形态
 
 第三步：测试发现的API
   → 验证API是否可用
